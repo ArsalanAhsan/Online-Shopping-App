@@ -1,15 +1,18 @@
 package com.onlineshopping.orderservice.service;
 
+import com.onlineshopping.inventoryservice.dto.InventoryResponse;
 import com.onlineshopping.orderservice.dto.OrderLineItemsDto;
 import com.onlineshopping.orderservice.dto.OrderRequest;
 import com.onlineshopping.orderservice.model.Order;
 import com.onlineshopping.orderservice.model.OrderLineItems;
 import com.onlineshopping.orderservice.repository.OrderRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -20,7 +23,9 @@ import java.util.stream.Collectors;
 public class OrderService {
 
     private final OrderRepository orderRepository;
-    private final WebClient webClient;
+    private final WebClient.Builder webClientBuilder;
+//    private final ObservationRegistry observationRegistry;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     public void placeOrder(OrderRequest orderRequest) {
         Order order = new Order();
@@ -33,17 +38,27 @@ public class OrderService {
 
         order.setOrderLineItemsList(orderLineItems);
 
+        List<String> skuCodes = order.getOrderLineItemsList().stream()
+                .map(OrderLineItems::getSkuCode)
+                .toList();
+
 //        call inventory service, and place order if product is in stock
-        Boolean result = webClient.get()
-                .uri("http://localhost:8002/api/inventory")
+        InventoryResponse[] inventoryResponseArray = webClientBuilder.build().get()
+                .uri("http://localhost:8002/api/inventory",uriBuilder -> uriBuilder.queryParam("skuCode", skuCodes).build())
                 .retrieve()
-                .bodyToMono(Boolean.class)
+                .bodyToMono(InventoryResponse[].class)
                 .block();
-        if(result){
+        boolean allProductsInStock = Arrays.stream(inventoryResponseArray)
+                .allMatch(InventoryResponse::isInStock);
+        if (allProductsInStock) {
             orderRepository.save(order);
+            // publish Order Placed Event
+//            applicationEventPublisher.publishEvent(new OrderPlacedEvent(this, order.getOrderNumber()));
+//            return "Order Placed";
+        } else {
+            throw new IllegalArgumentException("Product is not in stock, please try again later");
         }
-        throw new IllegalArgumentException("Product is not in stock, Please try again");
-    }
+}
 
     private OrderLineItems mapToDto(OrderLineItemsDto orderLineItemsDto) {
         OrderLineItems orderLineItems = new OrderLineItems();
