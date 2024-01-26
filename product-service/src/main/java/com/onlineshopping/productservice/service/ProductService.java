@@ -15,32 +15,28 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Slf4j
 public class ProductService {
-
     private final ProductRepository productRepository;
 
-    public void createProduct(ProductRequest productRequest) {
+    public ProductResponse createProduct(ProductRequest productRequest) {
         Product product = Product.builder()
-                .name(productRequest.getName())
-                .description(productRequest.getDescription())
-                .price(productRequest.getPrice())
+                .name(productRequest.name())
+                .description(productRequest.description())
+                .skuCode(productRequest.skuCode())
+                .price(productRequest.price())
                 .build();
-
         productRepository.save(product);
-        log.info("Product {} is saved", product.getId());
+        log.info("Product created successfully");
+        return new ProductResponse(product.getId(), product.getName(), product.getDescription(),
+                product.getSkuCode(),
+                product.getPrice());
     }
 
     public List<ProductResponse> getAllProducts() {
-        List<Product> products = productRepository.findAll();
-
-        return products.stream().map(this::mapToProductResponse).collect(Collectors.toList());
-    }
-
-    private ProductResponse mapToProductResponse(Product product) {
-        return ProductResponse.builder()
-                .id(product.getId())
-                .name(product.getName())
-                .description(product.getDescription())
-                .price(product.getPrice())
-                .build();
+        return productRepository.findAll()
+                .stream()
+                .map(product -> new ProductResponse(product.getId(), product.getName(), product.getDescription(),
+                        product.getSkuCode(),
+                        product.getPrice()))
+                .toList();
     }
 }
